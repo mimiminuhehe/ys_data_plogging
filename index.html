@@ -329,63 +329,48 @@
             position: relative;
         }
 
-        #map {
+        #map, #devMap {
             width: 100%;
             height: 100%;
         }
 
-        .log-container {
+        /* 순위표 스타일 */
+        .rank-container {
             max-height: 300px;
             overflow-y: auto;
         }
 
-        .log-item {
+        .rank-item {
             background: #f8f9fa;
-            padding: 15px;
-            margin-bottom: 10px;
+            padding: 12px 15px;
+            margin-bottom: 8px;
             border-radius: 6px;
             border: 1px solid #e9ecef;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 14px;
         }
 
-        .log-info {
-            font-size: 13px;
-            line-height: 1.6;
-            width: 85%;
-        }
-
-        .log-info .date {
+        .rank-number {
             font-weight: bold;
             color: #2b8a3e;
+            width: 30px;
         }
 
-        .tag-container {
-            margin-top: 6px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .trash-tag {
-            background: #e2f5e5;
-            color: #1b5e20;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+        .rank-name {
+            flex-grow: 1;
             font-weight: 600;
-            border: 1px solid #a4dba9;
+            color: #343a40;
         }
 
-        .delete-btn {
-            background: #fff5f5;
-            color: #e03131;
-            border: 1px solid #ffc9c9;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
+        .rank-score {
+            font-weight: bold;
+            color: #1b5e20;
+            background: #e2f5e5;
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid #a4dba9;
         }
 
         .no-data {
@@ -404,6 +389,7 @@
 </head>
 <body>
 
+<!-- [1] 메인 인트로 화면 -->
 <div id="introPage" class="page active">
     <div class="intro-container">
         <div class="intro-sub">YONGSAN HIGH SCHOOL</div>
@@ -415,13 +401,14 @@
     </div>
 </div>
 
+<!-- [2] 학번/이름 입력 모달 -->
 <div id="authModal" class="modal-overlay">
     <div class="modal-content">
         <h2 class="modal-title">사용자 인적사항 입력</h2>
         <form id="authForm">
             <div class="form-group">
-                <label for="studentId">학번 (5자리)</label>
-                <input type="number" id="studentId" placeholder="예: 10101" min="10000" max="39999" required>
+                <label for="studentId">학번 (5자리 또는 개발자 모드)</label>
+                <input type="text" id="studentId" placeholder="예: 10101" required>
             </div>
             <div class="form-group">
                 <label for="studentName">성명</label>
@@ -435,6 +422,7 @@
     </div>
 </div>
 
+<!-- [3] 일반 대시보드 화면 -->
 <div id="dashboardPage" class="page">
     <div class="main-grid">
         <header class="card full-width">
@@ -522,12 +510,41 @@
             </form>
         </section>
 
+        <!-- 로그 대신 추가된 수거 순위표 섹션 -->
         <section class="card full-width">
-            <h2 class="section-title">활동 기록 로그 관리</h2>
-            <div id="logContainer" class="log-container">
+            <h2 class="section-title">플로깅 수거 순위표 (총 수거 개수 기준)</h2>
+            <div id="rankContainer" class="rank-container">
                 </div>
         </section>
 
+    </div>
+</div>
+
+<!-- [4] 개발자 모드 전용 페이지 (지도 + 로그만 표시) -->
+<div id="devPage" class="page">
+    <div class="main-grid" style="grid-template-columns: 1fr;">
+        <header class="card">
+            <div class="system-header">
+                <h1>개발자 모드 - 통합 관리 시스템</h1>
+                <div>
+                    <span class="user-badge" style="background:#fff3cd; border-color:#ffeeba; color:#856404;">관리자 권한</span>
+                    <button class="logout-btn" onclick="logout()">로그아웃</button>
+                </div>
+            </div>
+        </header>
+
+        <section class="card" style="display: flex; flex-direction: column;">
+            <h2 class="section-title">전체 활동 위치 위성 맵 인터페이스</h2>
+            <div class="map-wrapper" style="min-height: 400px;">
+                <div id="devMap"></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="section-title">전체 활동 기록 로그 관리 (삭제 기능 포함)</h2>
+            <div id="devLogContainer" class="rank-container">
+                </div>
+        </section>
     </div>
 </div>
 
@@ -549,7 +566,8 @@
     const authModal = document.getElementById('authModal');
     const authForm = document.getElementById('authForm');
     const dataForm = document.getElementById('dataForm');
-    const logContainer = document.getElementById('logContainer');
+    const rankContainer = document.getElementById('rankContainer');
+    const devLogContainer = document.getElementById('devLogContainer');
     const otherTrashCb = document.getElementById('otherTrashCb');
     const otherField = document.getElementById('otherField');
     const otherTrashName = document.getElementById('otherTrashName');
@@ -557,9 +575,11 @@
     let currentUser = { id: '', name: '' };
     let appRecords = []; 
     
-    // Leaflet 지도 관련 전역 제어 변수
+    // 지도 관련 전역 제어 변수
     let map = null;
+    let devMap = null;
     let markersArray = []; 
+    let devMarkersArray = [];
 
     document.addEventListener('DOMContentLoaded', () => {
         setupCheckboxListeners();
@@ -573,25 +593,32 @@
             querySnapshot.forEach((doc) => {
                 appRecords.push(doc.data());
             });
-            renderLogs();
+            renderRanking();
+            renderDevLogs();
             updateDashboard();
         }).catch((error) => {
             console.error("데이터 로드 실패: ", error);
         });
     }
 
-    // Leaflet 무료 위성 지도 초기화 함수
+    // 일반 지도 초기화 함수
     function initLeafletMap() {
         if (map) return;
-        // 용산고등학교 중심 좌표 설정 (위도: 37.5445, 경도: 126.9815)
         map = L.map('map').setView([37.5445, 126.9815], 15);
-
-        // 무료 위성 지도 타일(Esri World Imagery) 적용
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             attribution: 'Tiles &copy; Esri'
         }).addTo(map);
-
         drawSavedMarkers();
+    }
+
+    // 개발자 모드 지도 초기화 함수
+    function initDevMap() {
+        if (devMap) return;
+        devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri'
+        }).addTo(devMap);
+        drawDevMarkers();
     }
 
     // 무료 오픈 주소 검색 (Nominatim API 활용)
@@ -644,8 +671,32 @@
 
     authForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        const studentId = document.getElementById('studentId').value;
-        const studentName = document.getElementById('studentName').value;
+        const studentId = document.getElementById('studentId').value.trim();
+        const studentName = document.getElementById('studentName').value.trim();
+
+        // 개발자 모드 체크 조건
+        if(studentId === '개발자 모드' && studentName === '개발자 모드') {
+            closeModal();
+            navigateTo('devPage');
+            
+            db.collection('records').get().then((querySnapshot) => {
+                appRecords = [];
+                querySnapshot.forEach((doc) => {
+                    appRecords.push(doc.data());
+                });
+                renderDevLogs();
+                setTimeout(() => {
+                    if (!devMap) {
+                        initDevMap();
+                    } else {
+                        devMap.invalidateSize();
+                        devMap.setView([37.5445, 126.9815], 15);
+                        drawDevMarkers();
+                    }
+                }, 200);
+            });
+            return;
+        }
 
         if(studentId.length !== 5) {
             alert('올바른 학번 5자리를 입력하십시오. (예: 10101)');
@@ -664,7 +715,7 @@
                 appRecords.push(doc.data());
             });
             updateDashboard();
-            renderLogs();
+            renderRanking();
 
             setTimeout(() => {
                 if (!map) {
@@ -723,7 +774,6 @@
             return;
         }
 
-        // 무료 지오코딩 API를 통한 위치 검색
         const coords = await searchLocation(place);
         if (!coords) {
             alert('입력하신 장소 또는 주소를 지도에서 찾을 수 없습니다. 정확하게 기입해 주세요.');
@@ -751,7 +801,7 @@
             .then(() => {
                 appRecords.push(record);
                 updateDashboard();
-                renderLogs();
+                renderRanking();
                 drawSavedMarkers(); 
                 dataForm.reset();
                 document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
@@ -775,64 +825,121 @@
     }
 
     function drawSavedMarkers() {
+        if (!map) return;
         markersArray.forEach(m => map.removeLayer(m));
         markersArray = [];
 
         const records = getRecordsFromStorage();
-
         records.forEach(record => {
             if(!record.lat || !record.lng) return;
-
             const marker = L.marker([record.lat, record.lng]).addTo(map);
-            
-            const popupContent = `
+            marker.bindPopup(`
                 <div style="font-size:12px;">
                     <strong>${record.place}</strong><br>
                     <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
                 </div>
-            `;
-            marker.bindPopup(popupContent);
-
+            `);
             markersArray.push(marker);
         });
     }
 
-    function renderLogs() {
+    function drawDevMarkers() {
+        if (!devMap) return;
+        devMarkersArray.forEach(m => devMap.removeLayer(m));
+        devMarkersArray = [];
+
+        const records = getRecordsFromStorage();
+        records.forEach(record => {
+            if(!record.lat || !record.lng) return;
+            const marker = L.marker([record.lat, record.lng]).addTo(devMap);
+            marker.bindPopup(`
+                <div style="font-size:12px;">
+                    <strong>${record.place}</strong> (${record.studentId} ${record.studentName})<br>
+                    <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
+                </div>
+            `);
+            devMarkersArray.push(marker);
+        });
+    }
+
+    // 학생별 총 수거 개수를 합산하여 순위표 생성
+    function renderRanking() {
+        const records = getRecordsFromStorage();
+        const userScores = {};
+
+        records.forEach(record => {
+            const key = `${record.studentId}_${record.studentName}`;
+            if (!userScores[key]) {
+                userScores[key] = {
+                    studentId: record.studentId,
+                    studentName: record.studentName,
+                    totalCount: 0
+                };
+            }
+            userScores[key].totalCount += record.totalTrashCount;
+        });
+
+        const rankArray = Object.values(userScores);
+        rankArray.sort((a, b) => b.totalCount - a.totalCount);
+
+        rankContainer.innerHTML = '';
+
+        if (rankArray.length === 0) {
+            rankContainer.innerHTML = '<p class="no-data">등록된 순위 데이터가 존재하지 않습니다.</p>';
+            return;
+        }
+
+        rankArray.forEach((user, index) => {
+            const item = document.createElement('div');
+            item.classList.add('rank-item');
+            item.innerHTML = `
+                <div class="rank-number">${index + 1}위</div>
+                <div class="rank-name">${user.studentName} (${user.studentId})</div>
+                <div class="rank-score">총 ${user.totalCount}개 수거</div>
+            `;
+            rankContainer.appendChild(item);
+        });
+    }
+
+    // 개발자 모드 전용 로그 리스트 렌더링 (삭제 기능 포함)
+    function renderDevLogs() {
         const records = getRecordsFromStorage();
         records.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        logContainer.innerHTML = '';
+        devLogContainer.innerHTML = '';
 
         if (records.length === 0) {
-            logContainer.innerHTML = '<p class="no-data">조회된 데이터가 존재하지 않습니다.</p>';
+            devLogContainer.innerHTML = '<p class="no-data">조회된 데이터가 존재하지 않습니다.</p>';
             return;
         }
 
         records.forEach(record => {
             const item = document.createElement('div');
-            item.classList.add('log-item');
-            const tagsHTML = record.items.map(it => `<span class="trash-tag">${it.name}: ${it.count}개</span>`).join('');
+            item.classList.add('rank-item');
+            const tagsHTML = record.items.map(it => `<span style="background:#e2f5e5; color:#1b5e20; padding:2px 6px; border-radius:4px; font-size:11px; margin-right:4px;">${it.name}: ${it.count}개</span>`).join('');
             item.innerHTML = `
-                <div class="log-info">
-                    <div class="date">[일자] ${record.date} | 장소: ${record.place} <span style="color:#666; font-weight:normal; font-size:12px;">(${record.studentId} ${record.studentName})</span></div>
-                    <div class="tag-container">${tagsHTML}</div>
-                    <div style="color: #666; font-size: 12px; margin-top: 6px;">비고: ${record.memo} (총 ${record.totalTrashCount}개)</div>
+                <div style="font-size: 13px; line-height: 1.5; width: 85%;">
+                    <strong>[${record.date}] ${record.place}</strong> (${record.studentId} ${record.studentName})<br>
+                    <div>${tagsHTML}</div>
+                    <div style="color: #666; font-size: 11px;">총 수거: ${record.totalTrashCount}개 | 비고: ${record.memo}</div>
                 </div>
-                <button class="delete-btn" onclick="deleteRecord(${record.id})">삭제</button>
+                <button style="background:#fff5f5; color:#e03131; border:1px solid #ffc9c9; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;" onclick="deleteRecord(${record.id})">삭제</button>
             `;
-            logContainer.appendChild(item);
+            devLogContainer.appendChild(item);
         });
     }
 
     function deleteRecord(id) {
-        if(!confirm('정말 삭제하시겠습니까?')) return;
+        if(!confirm('정말 이 기록을 삭제하시겠습니까?')) return;
 
         db.collection('records').doc(String(id)).delete()
             .then(() => {
                 appRecords = appRecords.filter(record => record.id !== id);
                 updateDashboard();
-                renderLogs();
+                renderRanking();
+                renderDevLogs();
                 drawSavedMarkers(); 
+                drawDevMarkers();
             })
             .catch((error) => {
                 console.error("삭제 실패: ", error);

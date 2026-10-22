@@ -321,7 +321,7 @@
 
         .map-wrapper {
             width: 100%;
-            height: 480px; /* 명확한 높이 지정으로 지도 안뜸 현상 방지 */
+            height: 480px; /* 고정 높이 지정으로 지도 안 뜸 현상 방지 */
             border: 1px solid #ced4da;
             border-radius: 8px;
             overflow: hidden;
@@ -372,7 +372,7 @@
             border: 1px solid #a4dba9;
         }
 
-        /* 개발자 모드 터미널 줄글 로그 스타일 */
+        /* 상세한 줄글 형식의 개발자 터미널 로그 스타일 */
         .terminal-log-container {
             background-color: #1e1e1e;
             color: #00ff66;
@@ -380,29 +380,33 @@
             border-radius: 8px;
             border: 1px solid #333333;
             padding: 15px;
-            max-height: 350px;
+            max-height: 400px;
             overflow-y: auto;
             font-size: 13px;
-            line-height: 1.6;
+            line-height: 1.8;
         }
 
         .terminal-line {
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             border-bottom: 1px dotted #333;
-            padding-bottom: 4px;
+            padding-bottom: 6px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
         }
 
         .terminal-delete-btn {
             background-color: #ff4d4d;
             color: white;
             border: none;
-            padding: 2px 6px;
+            padding: 4px 8px;
             border-radius: 4px;
             font-size: 11px;
             cursor: pointer;
+            font-family: 'Malgun Gothic', sans-serif;
+            font-weight: bold;
+            margin-left: 10px;
+            flex-shrink: 0;
         }
         .terminal-delete-btn:hover {
             background-color: #cc0000;
@@ -556,7 +560,7 @@
     </div>
 </div>
 
-<!-- [4] 개발자 모드 전용 페이지 (줄글 로그 + 접속자 수 표시) -->
+<!-- [4] 개발자 모드 전용 페이지 (상세 줄글 로그 + 접속자 수 표시) -->
 <div id="devPage" class="page">
     <div class="main-grid" style="grid-template-columns: 1fr;">
         <header class="card">
@@ -578,9 +582,9 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">실시간 시스템 로그 (Terminal Feed)</h2>
+            <h2 class="section-title">실시간 상세 시스템 로그 (Terminal Feed)</h2>
             <div id="devLogContainer" class="terminal-log-container">
-                <!-- 줄글 로그 출력 영역 -->
+                <!-- 상세 줄글 로그 출력 영역 -->
             </div>
         </section>
     </div>
@@ -612,7 +616,7 @@
 
     let currentUser = { id: '', name: '' };
     let appRecords = []; 
-    let presenceDocRef = null; // 접속자 관리를 위한 레퍼런스
+    let presenceDocRef = null;
     
     // Leaflet 지도 관련 전역 제어 변수
     let map = null;
@@ -628,15 +632,13 @@
 
     // 실시간 현재 접속자 수 관리 시스템
     function initPresenceSystem() {
-        const sessionId = 'user_' + Math.random().toString(36.25);
+        const sessionId = 'user_' + Math.random().toString(36).substring(2);
         presenceDocRef = db.collection('presence').doc(sessionId);
 
-        // 접속 등록
         presenceDocRef.set({
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         }).catch(err => console.error("접속 등록 실패:", err));
 
-        // 주기적으로 접속 유지 신호 전송 (heartbeat)
         setInterval(() => {
             if (currentUser.id || window.location.hash === '#dev') {
                 presenceDocRef.set({
@@ -645,12 +647,10 @@
             }
         }, 10000);
 
-        // 브라우저 종료 시 접속자 삭제
         window.addEventListener('beforeunload', () => {
             presenceDocRef.delete().catch(() => {});
         });
 
-        // 실시간 접속자 수 구독
         db.collection('presence').onSnapshot(snapshot => {
             const count = snapshot.size;
             const userCountEl = document.getElementById('activeUsersCount');
@@ -674,36 +674,34 @@
         });
     }
 
-    // Leaflet 보안 위성 지도 초기화 함수
+    // 일반 지도 초기화 및 크기 갱신 보완
     function initLeafletMap() {
-        if (map) {
-            map.invalidateSize();
-            return;
+        if (!map) {
+            map = L.map('map').setView([37.5445, 126.9815], 15);
+            L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
+                maxZoom: 19,
+                attribution: '&copy; V-World'
+            }).addTo(map);
         }
-        map = L.map('map').setView([37.5445, 126.9815], 15);
-        
-        L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
-            maxZoom: 19,
-            attribution: '&copy; V-World'
-        }).addTo(map);
-
-        drawSavedMarkers();
+        setTimeout(() => {
+            map.invalidateSize();
+            drawSavedMarkers();
+        }, 200);
     }
 
-    // 개발자 모드 Leaflet 보안 위성 지도 초기화 함수
+    // 개발자 모드 지도 초기화 및 크기 갱신 보완
     function initDevLeafletMap() {
-        if (devMap) {
-            devMap.invalidateSize();
-            return;
+        if (!devMap) {
+            devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
+            L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
+                maxZoom: 19,
+                attribution: '&copy; V-World'
+            }).addTo(devMap);
         }
-        devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
-        
-        L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
-            maxZoom: 19,
-            attribution: '&copy; V-World'
-        }).addTo(devMap);
-
-        drawDevMarkers();
+        setTimeout(() => {
+            devMap.invalidateSize();
+            drawDevMarkers();
+        }, 200);
     }
 
     async function searchLocation(placeQuery) {
@@ -758,7 +756,6 @@
         const studentId = document.getElementById('studentId').value.trim();
         const studentName = document.getElementById('studentName').value.trim();
 
-        // 개발자 모드 체크 조건
         if(studentId === '개발자 모드' && studentName === '개발자 모드') {
             closeModal();
             navigateTo('devPage');
@@ -769,12 +766,7 @@
                     appRecords.push(doc.data());
                 });
                 renderDevLogs();
-                setTimeout(() => {
-                    initDevLeafletMap();
-                    devMap.invalidateSize();
-                    devMap.setView([37.5445, 126.9815], 15);
-                    drawDevMarkers();
-                }, 200);
+                initDevLeafletMap();
             });
             return;
         }
@@ -804,19 +796,22 @@
             });
             updateDashboard();
             renderRanking();
-
-            setTimeout(() => {
-                initLeafletMap();
-                map.invalidateSize();
-                map.setView([37.5445, 126.9815], 15);
-                drawSavedMarkers();
-            }, 200);
+            initLeafletMap();
         });
     });
 
     function navigateTo(pageId) {
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
+        
+        // 페이지가 바뀔 때 지도 렌더링 강제 갱신
+        setTimeout(() => {
+            if (pageId === 'dashboardPage' && map) {
+                map.invalidateSize();
+            } else if (pageId === 'devPage' && devMap) {
+                devMap.invalidateSize();
+            }
+        }, 100);
     }
 
     function logout() {
@@ -895,7 +890,7 @@
                 document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
                 otherField.classList.remove('active');
                 
-                map.panTo([record.lat, record.lng]);
+                if (map) map.panTo([record.lat, record.lng]);
             })
             .catch((error) => {
                 console.error("저장 실패: ", error);
@@ -990,7 +985,7 @@
         });
     }
 
-    // 개발자 모드: 줄글 형식 로그 출력
+    // 개발자 모드: 더 상세하고 가독성 좋은 줄글 형식 로그 출력
     function renderDevLogs() {
         const records = getRecordsFromStorage();
         records.sort((a, b) => b.id - a.id);
@@ -998,24 +993,30 @@
         devLogContainer.innerHTML = '';
 
         if (records.length === 0) {
-            devLogContainer.innerHTML = '<div style="color: #777; text-align: center; padding: 20px;">[SYSTEM] 기록된 로그가 존재하지 않습니다.</div>';
+            devLogContainer.innerHTML = '<div style="color: #777; text-align: center; padding: 20px;">[SYSTEM] 기록된 상세 로그가 존재하지 않습니다.</div>';
             return;
         }
 
         records.forEach(record => {
             const timeStr = record.timestamp || '2026.00.00 00:00:00';
+            const itemsDetail = record.items.map(it => `${it.name} ${it.count}개`).join(', ');
+            
             const item = document.createElement('div');
             item.classList.add('terminal-line');
             item.innerHTML = `
-                <span>[${timeStr}] 학번 ${record.studentId} ${record.studentName}님이 "${record.place}"에서 플로깅 상호작용을 수행함 (총 ${record.totalTrashCount}개 수거)</span>
-                <button class="terminal-delete-btn" onclick="deleteRecord(${record.id})">삭제</button>
+                <span style="flex-grow: 1;">
+                    <strong>[${timeStr}]</strong> 학번 <strong>${record.studentId}</strong> 성명 <strong>${record.studentName}</strong>님이 
+                    '<span style="color: #4dabf7;">${record.place}</span>'(실시일자: ${record.date})에서 플로깅 활동을 기록함. 
+                    <br>&nbsp;&nbsp;└ 상세 수거 내역: [ ${itemsDetail} ] (총 수거량: <span style="color: #ffd43b;">${record.totalTrashCount}개</span>) | 비고: "${record.memo}"
+                </span>
+                <button class="terminal-delete-btn" onclick="deleteRecord(${record.id})">데이터 삭제</button>
             `;
             devLogContainer.appendChild(item);
         });
     }
 
     function deleteRecord(id) {
-        if(!confirm('정말 이 로그를 삭제하시겠습니까?')) return;
+        if(!confirm('정말 이 로그 기록을 데이터베이스에서 완전히 삭제하시겠습니까?')) return;
 
         db.collection('records').doc(String(id)).delete()
             .then(() => {

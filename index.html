@@ -321,8 +321,7 @@
 
         .map-wrapper {
             width: 100%;
-            height: 100%;
-            min-height: 480px;
+            height: 480px; /* 명확한 높이 지정으로 지도 안뜸 현상 방지 */
             border: 1px solid #ced4da;
             border-radius: 8px;
             overflow: hidden;
@@ -373,76 +372,40 @@
             border: 1px solid #a4dba9;
         }
 
-        /* 파이썬 IDE / 터미널 느낌의 개발자 로그창 스타일 */
-        .python-ide-container {
+        /* 개발자 모드 터미널 줄글 로그 스타일 */
+        .terminal-log-container {
             background-color: #1e1e1e;
-            color: #d4d4d4;
+            color: #00ff66;
             font-family: 'Consolas', 'Courier New', Courier, monospace;
             border-radius: 8px;
             border: 1px solid #333333;
-            overflow: hidden;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-        }
-
-        .ide-header-bar {
-            background-color: #2d2d2d;
-            padding: 8px 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            border-bottom: 1px solid #3c3c3c;
-        }
-
-        .ide-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-        .ide-dot-red { background-color: #ff5f56; }
-        .ide-dot-yellow { background-color: #ffbd2e; }
-        .ide-dot-green { background-color: #27c93f; }
-        .ide-title {
-            margin-left: 10px;
-            font-size: 12px;
-            color: #9cdcfe;
-        }
-
-        .ide-body {
+            padding: 15px;
             max-height: 350px;
             overflow-y: auto;
-            padding: 15px;
             font-size: 13px;
             line-height: 1.6;
         }
 
-        .python-code-line {
-            margin-bottom: 8px;
-            padding-bottom: 8px;
-            border-bottom: 1px dashed #333333;
+        .terminal-line {
+            margin-bottom: 6px;
+            border-bottom: 1px dotted #333;
+            padding-bottom: 4px;
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
         }
 
-        .python-keyword { color: #c586c0; }
-        .python-variable { color: #9cdcfe; }
-        .python-string { color: #ce9178; }
-        .python-number { color: #b5cea8; }
-        .python-comment { color: #6a9955; }
-
-        .dev-delete-btn {
-            background-color: #f14c4c;
-            color: #ffffff;
+        .terminal-delete-btn {
+            background-color: #ff4d4d;
+            color: white;
             border: none;
-            padding: 4px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
             font-size: 11px;
             cursor: pointer;
-            font-family: 'Malgun Gothic', sans-serif;
-            font-weight: bold;
         }
-        .dev-delete-btn:hover {
-            background-color: #d13438;
+        .terminal-delete-btn:hover {
+            background-color: #cc0000;
         }
 
         .no-data {
@@ -507,8 +470,9 @@
             </div>
             <div class="header-stats-container">
                 <div class="header-stats-title">실시간 종합 통계 현황</div>
-                <div class="header-stat-box">
+                <div class="header-stat-box" style="display: flex; gap: 20px;">
                     <p id="totalCount">총 활동 횟수: 0회</p>
+                    <p id="activeUsersCount" style="color: #1864ab;">현재 접속자: 0명</p>
                 </div>
             </div>
         </header>
@@ -592,13 +556,14 @@
     </div>
 </div>
 
-<!-- [4] 개발자 모드 전용 페이지 (파이썬 코딩창 형식 로그 적용) -->
+<!-- [4] 개발자 모드 전용 페이지 (줄글 로그 + 접속자 수 표시) -->
 <div id="devPage" class="page">
     <div class="main-grid" style="grid-template-columns: 1fr;">
         <header class="card">
             <div class="system-header">
                 <h1>개발자 모드 - 통합 관리 시스템</h1>
                 <div>
+                    <span id="devActiveUsers" class="user-badge" style="background:#e7f5ff; border-color:#74c0fc; color:#1864ab;">현재 접속자: 0명</span>
                     <span class="user-badge" style="background:#fff3cd; border-color:#ffeeba; color:#856404;">관리자 권한</span>
                     <button class="logout-btn" onclick="logout()">로그아웃</button>
                 </div>
@@ -613,17 +578,9 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">파이썬 데이터베이스 로그 콘솔 (Record Inspector)</h2>
-            <div class="python-ide-container">
-                <div class="ide-header-bar">
-                    <div class="ide-dot ide-dot-red"></div>
-                    <div class="ide-dot ide-dot-yellow"></div>
-                    <div class="ide-dot ide-dot-green"></div>
-                    <span class="ide-title">plogging_database_inspector.py — Python 3.11</span>
-                </div>
-                <div id="devLogContainer" class="ide-body">
-                    <!-- 파이썬 코딩창 형식으로 동적 렌더링됨 -->
-                </div>
+            <h2 class="section-title">실시간 시스템 로그 (Terminal Feed)</h2>
+            <div id="devLogContainer" class="terminal-log-container">
+                <!-- 줄글 로그 출력 영역 -->
             </div>
         </section>
     </div>
@@ -655,6 +612,7 @@
 
     let currentUser = { id: '', name: '' };
     let appRecords = []; 
+    let presenceDocRef = null; // 접속자 관리를 위한 레퍼런스
     
     // Leaflet 지도 관련 전역 제어 변수
     let map = null;
@@ -665,9 +623,43 @@
     document.addEventListener('DOMContentLoaded', () => {
         setupCheckboxListeners();
         fetchRecordsFromFirebase();
+        initPresenceSystem();
     });
 
-    // 파이어베이스에서 데이터 불러오기 함수
+    // 실시간 현재 접속자 수 관리 시스템
+    function initPresenceSystem() {
+        const sessionId = 'user_' + Math.random().toString(36.25);
+        presenceDocRef = db.collection('presence').doc(sessionId);
+
+        // 접속 등록
+        presenceDocRef.set({
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(err => console.error("접속 등록 실패:", err));
+
+        // 주기적으로 접속 유지 신호 전송 (heartbeat)
+        setInterval(() => {
+            if (currentUser.id || window.location.hash === '#dev') {
+                presenceDocRef.set({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).catch(() => {});
+            }
+        }, 10000);
+
+        // 브라우저 종료 시 접속자 삭제
+        window.addEventListener('beforeunload', () => {
+            presenceDocRef.delete().catch(() => {});
+        });
+
+        // 실시간 접속자 수 구독
+        db.collection('presence').onSnapshot(snapshot => {
+            const count = snapshot.size;
+            const userCountEl = document.getElementById('activeUsersCount');
+            const devUserCountEl = document.getElementById('devActiveUsers');
+            if (userCountEl) userCountEl.innerText = `현재 접속자: ${count}명`;
+            if (devUserCountEl) devUserCountEl.innerText = `현재 접속자: ${count}명`;
+        });
+    }
+
     function fetchRecordsFromFirebase() {
         db.collection('records').get().then((querySnapshot) => {
             appRecords = [];
@@ -873,6 +865,7 @@
             return;
         }
 
+        const now = new Date();
         const record = {
             id: Date.now(),
             studentId: currentUser.id,
@@ -883,7 +876,8 @@
             lng: parseFloat(coords.lng),
             items: collectedItems,
             totalTrashCount: totalCountInRecord,
-            memo
+            memo,
+            timestamp: `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
         };
 
         saveRecordToFirebase(record);
@@ -895,6 +889,7 @@
                 appRecords.push(record);
                 updateDashboard();
                 renderRanking();
+                renderDevLogs();
                 drawSavedMarkers(); 
                 dataForm.reset();
                 document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
@@ -995,44 +990,32 @@
         });
     }
 
-    // 개발자 모드: 파이썬 코딩창 형식으로 로그 출력
+    // 개발자 모드: 줄글 형식 로그 출력
     function renderDevLogs() {
         const records = getRecordsFromStorage();
-        records.sort((a, b) => new Date(b.date) - new Date(a.date));
+        records.sort((a, b) => b.id - a.id);
 
         devLogContainer.innerHTML = '';
 
         if (records.length === 0) {
-            devLogContainer.innerHTML = '<div style="color: #6a9955; text-align: center; padding: 20px;"># No records found in database.</div>';
+            devLogContainer.innerHTML = '<div style="color: #777; text-align: center; padding: 20px;">[SYSTEM] 기록된 로그가 존재하지 않습니다.</div>';
             return;
         }
 
-        records.forEach((record, index) => {
-            const lineNum = index + 1;
-            const itemsString = record.items.map(it => `"${it.name}": ${it.count}`).join(', ');
-            
+        records.forEach(record => {
+            const timeStr = record.timestamp || '2026.00.00 00:00:00';
             const item = document.createElement('div');
-            item.classList.add('python-code-line');
+            item.classList.add('terminal-line');
             item.innerHTML = `
-                <div>
-                    <span style="color: #858585; margin-right: 12px; user-select: none;">${lineNum}</span>
-                    <span class="python-keyword">record</span> = {
-                    <span class="python-string">"id"</span>: <span class="python-number">${record.id}</span>, 
-                    <span class="python-string">"student"</span>: <span class="python-string">"${record.studentId} ${record.studentName}"</span>, 
-                    <span class="python-string">"date"</span>: <span class="python-string">"${record.date}"</span>, 
-                    <span class="python-string">"place"</span>: <span class="python-string">"${record.place}"</span>, 
-                    <span class="python-string">"items"</span>: {${itemsString}}, 
-                    <span class="python-string">"total"</span>: <span class="python-number">${record.totalTrashCount}</span>
-                    } <span class="python-comment"># memo: ${record.memo}</span>
-                </div>
-                <button class="dev-delete-btn" onclick="deleteRecord(${record.id})">del()</button>
+                <span>[${timeStr}] 학번 ${record.studentId} ${record.studentName}님이 "${record.place}"에서 플로깅 상호작용을 수행함 (총 ${record.totalTrashCount}개 수거)</span>
+                <button class="terminal-delete-btn" onclick="deleteRecord(${record.id})">삭제</button>
             `;
             devLogContainer.appendChild(item);
         });
     }
 
     function deleteRecord(id) {
-        if(!confirm('정말 이 레코드를 데이터베이스에서 삭제하시겠습니까?')) return;
+        if(!confirm('정말 이 로그를 삭제하시겠습니까?')) return;
 
         db.collection('records').doc(String(id)).delete()
             .then(() => {

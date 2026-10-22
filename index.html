@@ -373,6 +373,78 @@
             border: 1px solid #a4dba9;
         }
 
+        /* 파이썬 IDE / 터미널 느낌의 개발자 로그창 스타일 */
+        .python-ide-container {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Courier New', Courier, monospace;
+            border-radius: 8px;
+            border: 1px solid #333333;
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .ide-header-bar {
+            background-color: #2d2d2d;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 1px solid #3c3c3c;
+        }
+
+        .ide-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .ide-dot-red { background-color: #ff5f56; }
+        .ide-dot-yellow { background-color: #ffbd2e; }
+        .ide-dot-green { background-color: #27c93f; }
+        .ide-title {
+            margin-left: 10px;
+            font-size: 12px;
+            color: #9cdcfe;
+        }
+
+        .ide-body {
+            max-height: 350px;
+            overflow-y: auto;
+            padding: 15px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .python-code-line {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #333333;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .python-keyword { color: #c586c0; }
+        .python-variable { color: #9cdcfe; }
+        .python-string { color: #ce9178; }
+        .python-number { color: #b5cea8; }
+        .python-comment { color: #6a9955; }
+
+        .dev-delete-btn {
+            background-color: #f14c4c;
+            color: #ffffff;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            font-family: 'Malgun Gothic', sans-serif;
+            font-weight: bold;
+        }
+        .dev-delete-btn:hover {
+            background-color: #d13438;
+        }
+
         .no-data {
             text-align: center;
             color: #868e96;
@@ -520,7 +592,7 @@
     </div>
 </div>
 
-<!-- [4] 개발자 모드 전용 페이지 (지도 + 로그만 표시) -->
+<!-- [4] 개발자 모드 전용 페이지 (파이썬 코딩창 형식 로그 적용) -->
 <div id="devPage" class="page">
     <div class="main-grid" style="grid-template-columns: 1fr;">
         <header class="card">
@@ -541,9 +613,18 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">전체 활동 기록 로그 관리 (삭제 기능 포함)</h2>
-            <div id="devLogContainer" class="rank-container">
+            <h2 class="section-title">파이썬 데이터베이스 로그 콘솔 (Record Inspector)</h2>
+            <div class="python-ide-container">
+                <div class="ide-header-bar">
+                    <div class="ide-dot ide-dot-red"></div>
+                    <div class="ide-dot ide-dot-yellow"></div>
+                    <div class="ide-dot ide-dot-green"></div>
+                    <span class="ide-title">plogging_database_inspector.py — Python 3.11</span>
                 </div>
+                <div id="devLogContainer" class="ide-body">
+                    <!-- 파이썬 코딩창 형식으로 동적 렌더링됨 -->
+                </div>
+            </div>
         </section>
     </div>
 </div>
@@ -601,7 +682,7 @@
         });
     }
 
-    // Leaflet 보안 위성 지도 초기화 함수 (브이월드 위성지도 적용으로 군사시설 등 보안지역 자동 가려짐)
+    // Leaflet 보안 위성 지도 초기화 함수
     function initLeafletMap() {
         if (map) {
             map.invalidateSize();
@@ -609,7 +690,6 @@
         }
         map = L.map('map').setView([37.5445, 126.9815], 15);
         
-        // 국내 브이월드(V-World) 위성지도 타일 적용 (보안 지역 블러 처리 반영)
         L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
             maxZoom: 19,
             attribution: '&copy; V-World'
@@ -634,7 +714,6 @@
         drawDevMarkers();
     }
 
-    // 무료 오픈 주소 검색 (Nominatim API 활용)
     async function searchLocation(placeQuery) {
         try {
             const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeQuery)}`);
@@ -708,14 +787,12 @@
             return;
         }
 
-        // 학번 유효성 검사 (숫자 5자리 및 학년 1~3, 반 1~10, 번호 1~25 범위 체크)
         const idRegex = /^[1-3](0[1-9]|10)(0[1-9]|1[0-9]|2[0-5])$/;
         if(!idRegex.test(studentId)) {
             alert('조건에 부합하지 않습니다: 학번은 1~3학년, 01~10반, 01~25번 사이의 올바른 5자리 숫자로 입력해야 합니다.');
             return;
         }
 
-        // 이름 유효성 검사 (오직 한글 완성형만 허용)
         const nameRegex = /^[가-힣]+$/;
         if(!nameRegex.test(studentName)) {
             alert('조건에 부합하지 않습니다: 성명은 공백 없이 한글만 입력 가능합니다.');
@@ -880,7 +957,6 @@
         });
     }
 
-    // 학생별 총 수거 개수를 합산하여 순위표 생성
     function renderRanking() {
         const records = getRecordsFromStorage();
         const userScores = {};
@@ -919,7 +995,7 @@
         });
     }
 
-    // 개발자 모드 전용 로그 리스트 렌더링 (삭제 기능 포함)
+    // 개발자 모드: 파이썬 코딩창 형식으로 로그 출력
     function renderDevLogs() {
         const records = getRecordsFromStorage();
         records.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -927,28 +1003,36 @@
         devLogContainer.innerHTML = '';
 
         if (records.length === 0) {
-            devLogContainer.innerHTML = '<p class="no-data">조회된 데이터가 존재하지 않습니다.</p>';
+            devLogContainer.innerHTML = '<div style="color: #6a9955; text-align: center; padding: 20px;"># No records found in database.</div>';
             return;
         }
 
-        records.forEach(record => {
+        records.forEach((record, index) => {
+            const lineNum = index + 1;
+            const itemsString = record.items.map(it => `"${it.name}": ${it.count}`).join(', ');
+            
             const item = document.createElement('div');
-            item.classList.add('rank-item');
-            const tagsHTML = record.items.map(it => `<span style="background:#e2f5e5; color:#1b5e20; padding:2px 6px; border-radius:4px; font-size:11px; margin-right:4px;">${it.name}: ${it.count}개</span>`).join('');
+            item.classList.add('python-code-line');
             item.innerHTML = `
-                <div style="font-size: 13px; line-height: 1.5; width: 85%;">
-                    <strong>[${record.date}] ${record.place}</strong> (${record.studentId} ${record.studentName})<br>
-                    <div>${tagsHTML}</div>
-                    <div style="color: #666; font-size: 11px;">총 수거: ${record.totalTrashCount}개 | 비고: ${record.memo}</div>
+                <div>
+                    <span style="color: #858585; margin-right: 12px; user-select: none;">${lineNum}</span>
+                    <span class="python-keyword">record</span> = {
+                    <span class="python-string">"id"</span>: <span class="python-number">${record.id}</span>, 
+                    <span class="python-string">"student"</span>: <span class="python-string">"${record.studentId} ${record.studentName}"</span>, 
+                    <span class="python-string">"date"</span>: <span class="python-string">"${record.date}"</span>, 
+                    <span class="python-string">"place"</span>: <span class="python-string">"${record.place}"</span>, 
+                    <span class="python-string">"items"</span>: {${itemsString}}, 
+                    <span class="python-string">"total"</span>: <span class="python-number">${record.totalTrashCount}</span>
+                    } <span class="python-comment"># memo: ${record.memo}</span>
                 </div>
-                <button style="background:#fff5f5; color:#e03131; border:1px solid #ffc9c9; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;" onclick="deleteRecord(${record.id})">삭제</button>
+                <button class="dev-delete-btn" onclick="deleteRecord(${record.id})">del()</button>
             `;
             devLogContainer.appendChild(item);
         });
     }
 
     function deleteRecord(id) {
-        if(!confirm('정말 이 기록을 삭제하시겠습니까?')) return;
+        if(!confirm('정말 이 레코드를 데이터베이스에서 삭제하시겠습니까?')) return;
 
         db.collection('records').doc(String(id)).delete()
             .then(() => {

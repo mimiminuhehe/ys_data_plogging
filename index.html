@@ -321,7 +321,7 @@
 
         .map-wrapper {
             width: 100%;
-            height: 480px; /* 고정 높이 지정으로 지도 안 뜸 현상 방지 */
+            height: 480px; /* 고정 높이 지정으로 지도 렌더링 보장 */
             border: 1px solid #ced4da;
             border-radius: 8px;
             overflow: hidden;
@@ -482,7 +482,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">활동 위치 맵 인터페이스 (보안 위성 지도 적용)</h2>
+            <h2 class="section-title">활동 위치 맵 인터페이스</h2>
             <div class="map-wrapper">
                 <div id="map"></div>
             </div>
@@ -575,7 +575,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">전체 활동 위치 맵 인터페이스 (보안 위성 지도 적용)</h2>
+            <h2 class="section-title">전체 활동 위치 맵 인터페이스</h2>
             <div class="map-wrapper" style="min-height: 400px;">
                 <div id="devMap"></div>
             </div>
@@ -617,6 +617,7 @@
     let currentUser = { id: '', name: '' };
     let appRecords = []; 
     let presenceDocRef = null;
+    let currentSessionId = 'user_' + Math.random().toString(36).substring(2);
     
     // Leaflet 지도 관련 전역 제어 변수
     let map = null;
@@ -630,24 +631,25 @@
         initPresenceSystem();
     });
 
-    // 실시간 현재 접속자 수 관리 시스템
+    // 실시간 접속자 및 로그인/로그아웃 시간 추적 시스템
     function initPresenceSystem() {
-        const sessionId = 'user_' + Math.random().toString(36).substring(2);
-        presenceDocRef = db.collection('presence').doc(sessionId);
-
-        presenceDocRef.set({
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }).catch(err => console.error("접속 등록 실패:", err));
+        presenceDocRef = db.collection('presence').doc(currentSessionId);
 
         setInterval(() => {
             if (currentUser.id || window.location.hash === '#dev') {
                 presenceDocRef.set({
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    sessionId: currentSessionId,
+                    studentId: currentUser.id || 'DEV',
+                    studentName: currentUser.name || 'Developer',
+                    lastActive: firebase.firestore.FieldValue.serverTimestamp()
                 }).catch(() => {});
             }
         }, 10000);
 
         window.addEventListener('beforeunload', () => {
+            if (currentUser.id) {
+                logSessionAction('LOGOUT');
+            }
             presenceDocRef.delete().catch(() => {});
         });
 
@@ -660,6 +662,22 @@
         });
     }
 
+    function logSessionAction(actionType) {
+        const now = new Date();
+        const timeStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        
+        const sessionLog = {
+            id: Date.now() + Math.random(),
+            studentId: currentUser.id,
+            studentName: currentUser.name,
+            action: actionType, // LOGIN 또는 LOGOUT
+            timestamp: timeStr,
+            type: 'SESSION'
+        };
+
+        db.collection('system_logs').add(sessionLog).catch(err => console.error("세션 로그 저장 실패:", err));
+    }
+
     function fetchRecordsFromFirebase() {
         db.collection('records').get().then((querySnapshot) => {
             appRecords = [];
@@ -667,20 +685,26 @@
                 appRecords.push(doc.data());
             });
             renderRanking();
-            renderDevLogs();
             updateDashboard();
         }).catch((error) => {
             console.error("데이터 로드 실패: ", error);
         });
+
+        // 시스템 로그(로그인/로그아웃 및 활동 기록) 실시간 수신
+        db.collection('system_logs').orderBy('id', 'desc').onSnapshot(snapshot => {
+            const logs = [];
+            snapshot.forEach(doc => logs.push(doc.data()));
+            renderDevLogs(logs);
+        });
     }
 
-    // 일반 지도 초기화 및 크기 갱신 보완
+    // 일반 지도 초기화 (오픈스트리트맵 기본 타일 적용으로 지도 안 뜸 문제 해결)
     function initLeafletMap() {
         if (!map) {
             map = L.map('map').setView([37.5445, 126.9815], 15);
-            L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: '&copy; V-World'
+                attribution: '&copy; OpenStreetMap'
             }).addTo(map);
         }
         setTimeout(() => {
@@ -689,13 +713,13 @@
         }, 200);
     }
 
-    // 개발자 모드 지도 초기화 및 크기 갱신 보완
+    // 개발자 모드 지도 초기화
     function initDevLeafletMap() {
         if (!devMap) {
             devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
-            L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: '&copy; V-World'
+                attribution: '&copy; OpenStreetMap'
             }).addTo(devMap);
         }
         setTimeout(() => {
@@ -757,6 +781,8 @@
         const studentName = document.getElementById('studentName').value.trim();
 
         if(studentId === '개발자 모드' && studentName === '개발자 모드') {
+            currentUser.id = 'DEV';
+            currentUser.name = '개발자';
             closeModal();
             navigateTo('devPage');
             
@@ -765,7 +791,6 @@
                 querySnapshot.forEach((doc) => {
                     appRecords.push(doc.data());
                 });
-                renderDevLogs();
                 initDevLeafletMap();
             });
             return;
@@ -786,6 +811,18 @@
         currentUser.id = studentId;
         currentUser.name = studentName;
         document.getElementById('userDisplay').innerText = `${studentId} ${studentName}`;
+        
+        // 로그인 세션 기록 전송
+        logSessionAction('LOGIN');
+
+        // 접속 상태 등록
+        presenceDocRef.set({
+            sessionId: currentSessionId,
+            studentId: studentId,
+            studentName: studentName,
+            lastActive: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+
         closeModal();
         navigateTo('dashboardPage');
         
@@ -804,7 +841,6 @@
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
         
-        // 페이지가 바뀔 때 지도 렌더링 강제 갱신
         setTimeout(() => {
             if (pageId === 'dashboardPage' && map) {
                 map.invalidateSize();
@@ -816,6 +852,10 @@
 
     function logout() {
         if(confirm('로그아웃 하시겠습니까?')) {
+            if (currentUser.id && currentUser.id !== 'DEV') {
+                logSessionAction('LOGOUT');
+                presenceDocRef.delete().catch(() => {});
+            }
             currentUser = { id: '', name: '' };
             navigateTo('introPage');
         }
@@ -861,8 +901,11 @@
         }
 
         const now = new Date();
+        const timeStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        
+        const recordId = Date.now();
         const record = {
-            id: Date.now(),
+            id: recordId,
             studentId: currentUser.id,
             studentName: currentUser.name,
             date,
@@ -872,7 +915,8 @@
             items: collectedItems,
             totalTrashCount: totalCountInRecord,
             memo,
-            timestamp: `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+            timestamp: timeStr,
+            type: 'RECORD'
         };
 
         saveRecordToFirebase(record);
@@ -881,10 +925,23 @@
     function saveRecordToFirebase(record) {
         db.collection('records').doc(String(record.id)).set(record)
             .then(() => {
+                // 활동 로그를 system_logs에 함께 기록
+                db.collection('system_logs').add({
+                    id: record.id,
+                    studentId: record.studentId,
+                    studentName: record.studentName,
+                    place: record.place,
+                    date: record.date,
+                    items: record.items,
+                    totalTrashCount: record.totalTrashCount,
+                    memo: record.memo,
+                    timestamp: record.timestamp,
+                    type: 'RECORD'
+                });
+
                 appRecords.push(record);
                 updateDashboard();
                 renderRanking();
-                renderDevLogs();
                 drawSavedMarkers(); 
                 dataForm.reset();
                 document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
@@ -985,32 +1042,37 @@
         });
     }
 
-    // 개발자 모드: 더 상세하고 가독성 좋은 줄글 형식 로그 출력
-    function renderDevLogs() {
-        const records = getRecordsFromStorage();
-        records.sort((a, b) => b.id - a.id);
-
+    // 개발자 모드: 로그인/로그아웃 및 상세 플로깅 활동 줄글 로그 렌더링
+    function renderDevLogs(logs) {
+        logs.sort((a, b) => b.id - a.id);
         devLogContainer.innerHTML = '';
 
-        if (records.length === 0) {
+        if (logs.length === 0) {
             devLogContainer.innerHTML = '<div style="color: #777; text-align: center; padding: 20px;">[SYSTEM] 기록된 상세 로그가 존재하지 않습니다.</div>';
             return;
         }
 
-        records.forEach(record => {
-            const timeStr = record.timestamp || '2026.00.00 00:00:00';
-            const itemsDetail = record.items.map(it => `${it.name} ${it.count}개`).join(', ');
-            
+        logs.forEach(log => {
             const item = document.createElement('div');
             item.classList.add('terminal-line');
-            item.innerHTML = `
-                <span style="flex-grow: 1;">
-                    <strong>[${timeStr}]</strong> 학번 <strong>${record.studentId}</strong> 성명 <strong>${record.studentName}</strong>님이 
-                    '<span style="color: #4dabf7;">${record.place}</span>'(실시일자: ${record.date})에서 플로깅 활동을 기록함. 
-                    <br>&nbsp;&nbsp;└ 상세 수거 내역: [ ${itemsDetail} ] (총 수거량: <span style="color: #ffd43b;">${record.totalTrashCount}개</span>) | 비고: "${record.memo}"
-                </span>
-                <button class="terminal-delete-btn" onclick="deleteRecord(${record.id})">데이터 삭제</button>
-            `;
+
+            if (log.type === 'SESSION') {
+                const actionText = log.action === 'LOGIN' ? '<span style="color: #4dabf7;">시스템에 로그인함</span>' : '<span style="color: #ff6b6b;">시스템에서 로그아웃함(이탈)</span>';
+                item.innerHTML = `
+                    <span><strong>[${log.timestamp}]</strong> [접속세션] 학번 <strong>${log.studentId}</strong> 성명 <strong>${log.studentName}</strong>님이 ${actionText}</span>
+                    <span></span>
+                `;
+            } else {
+                const itemsDetail = log.items.map(it => `${it.name} ${it.count}개`).join(', ');
+                item.innerHTML = `
+                    <span style="flex-grow: 1;">
+                        <strong>[${log.timestamp}]</strong> [플로깅기록] 학번 <strong>${log.studentId}</strong> 성명 <strong>${log.studentName}</strong>님이 
+                        '<span style="color: #4dabf7;">${log.place}</span>'(실시일자: ${log.date})에서 활동을 등록함. 
+                        <br>&nbsp;&nbsp;└ 상세 수거 내역: [ ${itemsDetail} ] (총 수거량: <span style="color: #ffd43b;">${log.totalTrashCount}개</span>) | 비고: "${log.memo}"
+                    </span>
+                    <button class="terminal-delete-btn" onclick="deleteRecord('${log.id}')">데이터 삭제</button>
+                `;
+            }
             devLogContainer.appendChild(item);
         });
     }
@@ -1018,19 +1080,25 @@
     function deleteRecord(id) {
         if(!confirm('정말 이 로그 기록을 데이터베이스에서 완전히 삭제하시겠습니까?')) return;
 
-        db.collection('records').doc(String(id)).delete()
-            .then(() => {
-                appRecords = appRecords.filter(record => record.id !== id);
-                updateDashboard();
-                renderRanking();
-                renderDevLogs();
-                drawSavedMarkers(); 
-                drawDevMarkers();
-            })
-            .catch((error) => {
-                console.error("삭제 실패: ", error);
-                alert("데이터 삭제 중 오류가 발생했습니다.");
+        // records 컬렉션에서 삭제
+        db.collection('records').doc(String(id)).delete().catch(() => {});
+
+        // system_logs 컬렉션에서 해당 id를 가진 문서 찾아서 삭제
+        db.collection('system_logs').where('id', '==', Number(id) || id).get().then(snapshot => {
+            snapshot.forEach(doc => {
+                doc.ref.delete();
             });
+            alert('삭제되었습니다.');
+            // 로컬 데이터 갱신
+            appRecords = appRecords.filter(record => record.id !== Number(id) && record.id !== id);
+            updateDashboard();
+            renderRanking();
+            drawSavedMarkers();
+            drawDevMarkers();
+        }).catch((error) => {
+            console.error("삭제 실패: ", error);
+            alert("데이터 삭제 중 오류가 발생했습니다.");
+        });
     }
 </script>
 

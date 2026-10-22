@@ -627,26 +627,36 @@
 
     // 카카오 지도 초기화 함수
     function initKakaoMap() {
-        if (map) return;
+        if (map) {
+            map.relayout();
+            map.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+            return;
+        }
         const container = document.getElementById('map');
         const options = {
             center: new kakao.maps.LatLng(37.5445, 126.9815), 
             level: 4 
         };
         map = new kakao.maps.Map(container, options);
+        map.setMapTypeId(kakao.maps.MapTypeId.HYBRID); // 위성지도(하이브리드) 고정
         geocoder = new kakao.maps.services.Geocoder(); 
         drawSavedMarkers();
     }
 
     // 개발자 모드 카카오 지도 초기화 함수
     function initDevKakaoMap() {
-        if (devMap) return;
+        if (devMap) {
+            devMap.relayout();
+            devMap.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+            return;
+        }
         const container = document.getElementById('devMap');
         const options = {
             center: new kakao.maps.LatLng(37.5445, 126.9815), 
             level: 4 
         };
         devMap = new kakao.maps.Map(container, options);
+        devMap.setMapTypeId(kakao.maps.MapTypeId.HYBRID); // 위성지도(하이브리드) 고정
         drawDevMarkers();
     }
 
@@ -700,13 +710,10 @@
                 });
                 renderDevLogs();
                 setTimeout(() => {
-                    if (!devMap) {
-                        initDevKakaoMap();
-                    } else {
-                        devMap.relayout();
-                        devMap.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
-                        drawDevMarkers();
-                    }
+                    initDevKakaoMap();
+                    devMap.relayout();
+                    devMap.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+                    drawDevMarkers();
                 }, 200);
             });
             return;
@@ -741,13 +748,10 @@
             renderRanking();
 
             setTimeout(() => {
-                if (!map) {
-                    initKakaoMap();
-                } else {
-                    map.relayout();
-                    map.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
-                    drawSavedMarkers();
-                }
+                initKakaoMap();
+                map.relayout();
+                map.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+                drawSavedMarkers();
             }, 200);
         });
     });

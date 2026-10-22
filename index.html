@@ -321,7 +321,7 @@
 
         .map-wrapper {
             width: 100%;
-            height: 480px; /* 고정 높이 지정으로 지도 렌더링 보장 */
+            height: 480px;
             border: 1px solid #ced4da;
             border-radius: 8px;
             overflow: hidden;
@@ -372,7 +372,7 @@
             border: 1px solid #a4dba9;
         }
 
-        /* 상세한 줄글 형식의 개발자 터미널 로그 스타일 */
+        /* 깔끔한 줄글 형식의 개발자 터미널 로그 스타일 */
         .terminal-log-container {
             background-color: #1e1e1e;
             color: #00ff66;
@@ -383,30 +383,26 @@
             max-height: 400px;
             overflow-y: auto;
             font-size: 13px;
-            line-height: 1.8;
+            line-height: 1.6;
         }
 
         .terminal-line {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             border-bottom: 1px dotted #333;
-            padding-bottom: 6px;
+            padding-bottom: 4px;
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
         }
 
         .terminal-delete-btn {
             background-color: #ff4d4d;
             color: white;
             border: none;
-            padding: 4px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
             font-size: 11px;
             cursor: pointer;
-            font-family: 'Malgun Gothic', sans-serif;
-            font-weight: bold;
-            margin-left: 10px;
-            flex-shrink: 0;
         }
         .terminal-delete-btn:hover {
             background-color: #cc0000;
@@ -560,7 +556,7 @@
     </div>
 </div>
 
-<!-- [4] 개발자 모드 전용 페이지 (상세 줄글 로그 + 접속자 수 표시) -->
+<!-- [4] 개발자 모드 전용 페이지 -->
 <div id="devPage" class="page">
     <div class="main-grid" style="grid-template-columns: 1fr;">
         <header class="card">
@@ -582,9 +578,9 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">실시간 상세 시스템 로그 (Terminal Feed)</h2>
+            <h2 class="section-title">실시간 시스템 로그 (Terminal Feed)</h2>
             <div id="devLogContainer" class="terminal-log-container">
-                <!-- 상세 줄글 로그 출력 영역 -->
+                <!-- 한 줄 줄글 로그 출력 영역 -->
             </div>
         </section>
     </div>
@@ -619,7 +615,6 @@
     let presenceDocRef = null;
     let currentSessionId = 'user_' + Math.random().toString(36).substring(2);
     
-    // Leaflet 지도 관련 전역 제어 변수
     let map = null;
     let devMap = null;
     let markersArray = []; 
@@ -631,7 +626,6 @@
         initPresenceSystem();
     });
 
-    // 실시간 접속자 및 로그인/로그아웃 시간 추적 시스템
     function initPresenceSystem() {
         presenceDocRef = db.collection('presence').doc(currentSessionId);
 
@@ -670,7 +664,7 @@
             id: Date.now() + Math.random(),
             studentId: currentUser.id,
             studentName: currentUser.name,
-            action: actionType, // LOGIN 또는 LOGOUT
+            action: actionType,
             timestamp: timeStr,
             type: 'SESSION'
         };
@@ -690,7 +684,6 @@
             console.error("데이터 로드 실패: ", error);
         });
 
-        // 시스템 로그(로그인/로그아웃 및 활동 기록) 실시간 수신
         db.collection('system_logs').orderBy('id', 'desc').onSnapshot(snapshot => {
             const logs = [];
             snapshot.forEach(doc => logs.push(doc.data()));
@@ -698,7 +691,6 @@
         });
     }
 
-    // 일반 지도 초기화 (오픈스트리트맵 기본 타일 적용으로 지도 안 뜸 문제 해결)
     function initLeafletMap() {
         if (!map) {
             map = L.map('map').setView([37.5445, 126.9815], 15);
@@ -713,7 +705,6 @@
         }, 200);
     }
 
-    // 개발자 모드 지도 초기화
     function initDevLeafletMap() {
         if (!devMap) {
             devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
@@ -812,10 +803,8 @@
         currentUser.name = studentName;
         document.getElementById('userDisplay').innerText = `${studentId} ${studentName}`;
         
-        // 로그인 세션 기록 전송
         logSessionAction('LOGIN');
 
-        // 접속 상태 등록
         presenceDocRef.set({
             sessionId: currentSessionId,
             studentId: studentId,
@@ -925,16 +914,12 @@
     function saveRecordToFirebase(record) {
         db.collection('records').doc(String(record.id)).set(record)
             .then(() => {
-                // 활동 로그를 system_logs에 함께 기록
                 db.collection('system_logs').add({
                     id: record.id,
                     studentId: record.studentId,
                     studentName: record.studentName,
                     place: record.place,
-                    date: record.date,
-                    items: record.items,
                     totalTrashCount: record.totalTrashCount,
-                    memo: record.memo,
                     timestamp: record.timestamp,
                     type: 'RECORD'
                 });
@@ -1042,13 +1027,13 @@
         });
     }
 
-    // 개발자 모드: 로그인/로그아웃 및 상세 플로깅 활동 줄글 로그 렌더링
+    // 개발자 모드: 원래의 깔끔한 한 줄 줄글 로그 형식으로 복원
     function renderDevLogs(logs) {
         logs.sort((a, b) => b.id - a.id);
         devLogContainer.innerHTML = '';
 
         if (logs.length === 0) {
-            devLogContainer.innerHTML = '<div style="color: #777; text-align: center; padding: 20px;">[SYSTEM] 기록된 상세 로그가 존재하지 않습니다.</div>';
+            devLogContainer.innerHTML = '<div style="color: #777; text-align: center; padding: 20px;">[SYSTEM] 기록된 로그가 존재하지 않습니다.</div>';
             return;
         }
 
@@ -1057,20 +1042,15 @@
             item.classList.add('terminal-line');
 
             if (log.type === 'SESSION') {
-                const actionText = log.action === 'LOGIN' ? '<span style="color: #4dabf7;">시스템에 로그인함</span>' : '<span style="color: #ff6b6b;">시스템에서 로그아웃함(이탈)</span>';
+                const actionText = log.action === 'LOGIN' ? '로그인함' : '로그아웃함(이탈)';
                 item.innerHTML = `
-                    <span><strong>[${log.timestamp}]</strong> [접속세션] 학번 <strong>${log.studentId}</strong> 성명 <strong>${log.studentName}</strong>님이 ${actionText}</span>
+                    <span>[${log.timestamp}] 학번 ${log.studentId} ${log.studentName}님이 시스템에 ${actionText}</span>
                     <span></span>
                 `;
             } else {
-                const itemsDetail = log.items.map(it => `${it.name} ${it.count}개`).join(', ');
                 item.innerHTML = `
-                    <span style="flex-grow: 1;">
-                        <strong>[${log.timestamp}]</strong> [플로깅기록] 학번 <strong>${log.studentId}</strong> 성명 <strong>${log.studentName}</strong>님이 
-                        '<span style="color: #4dabf7;">${log.place}</span>'(실시일자: ${log.date})에서 활동을 등록함. 
-                        <br>&nbsp;&nbsp;└ 상세 수거 내역: [ ${itemsDetail} ] (총 수거량: <span style="color: #ffd43b;">${log.totalTrashCount}개</span>) | 비고: "${log.memo}"
-                    </span>
-                    <button class="terminal-delete-btn" onclick="deleteRecord('${log.id}')">데이터 삭제</button>
+                    <span>[${log.timestamp}] 학번 ${log.studentId} ${log.studentName}님이 "${log.place}"에서 플로깅 상호작용을 수행함 (총 ${log.totalTrashCount}개 수거)</span>
+                    <button class="terminal-delete-btn" onclick="deleteRecord('${log.id}')">삭제</button>
                 `;
             }
             devLogContainer.appendChild(item);
@@ -1078,18 +1058,14 @@
     }
 
     function deleteRecord(id) {
-        if(!confirm('정말 이 로그 기록을 데이터베이스에서 완전히 삭제하시겠습니까?')) return;
+        if(!confirm('정말 이 로그를 삭제하시겠습니까?')) return;
 
-        // records 컬렉션에서 삭제
         db.collection('records').doc(String(id)).delete().catch(() => {});
 
-        // system_logs 컬렉션에서 해당 id를 가진 문서 찾아서 삭제
         db.collection('system_logs').where('id', '==', Number(id) || id).get().then(snapshot => {
             snapshot.forEach(doc => {
                 doc.ref.delete();
             });
-            alert('삭제되었습니다.');
-            // 로컬 데이터 갱신
             appRecords = appRecords.filter(record => record.id !== Number(id) && record.id !== id);
             updateDashboard();
             renderRanking();

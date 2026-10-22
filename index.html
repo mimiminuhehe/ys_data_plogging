@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>용산고등학교 데이터 플로깅 기록지</title>
+    
+    <!-- 
+      [보안 안내] 
+      1. 브이월드 개발자 센터(vworld.kr)에서 해당 API 키에 '서비스 도메인(URL)'을 반드시 등록하여 도용을 차단하세요.
+      2. Firebase 콘솔의 Firestore '규칙(Rules)' 탭에서 데이터베이스 쓰기 권한을 제어하세요.
+    -->
+
     <!-- Firebase SDK (Compat 버전) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -626,8 +633,43 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         setupCheckboxListeners();
-        fetchRecordsFromFirebase();
         initPresenceSystem();
+        
+        // 새로고침 시 로그인 상태 자동 복원 로직 추가
+        const savedUser = localStorage.getItem('plogging_user');
+        if (savedUser) {
+            try {
+                const parsed = JSON.parse(savedUser);
+                currentUser.id = parsed.id;
+                currentUser.name = parsed.name;
+
+                if (currentUser.id === '개발자 모드' && currentUser.name === '개발자 모드') {
+                    navigateTo('devPage');
+                    db.collection('records').get().then((querySnapshot) => {
+                        appRecords = [];
+                        querySnapshot.forEach((doc) => { appRecords.push(doc.data()); });
+                        renderDevLogs();
+                        initDevLeafletMap();
+                    });
+                } else {
+                    document.getElementById('userDisplay').innerText = `${currentUser.id} ${currentUser.name}`;
+                    navigateTo('dashboardPage');
+                    db.collection('records').get().then((querySnapshot) => {
+                        appRecords = [];
+                        querySnapshot.forEach((doc) => { appRecords.push(doc.data()); });
+                        updateDashboard();
+                        renderRanking();
+                        initLeafletMap();
+                    });
+                }
+                return;
+            } catch (e) {
+                localStorage.removeItem('plogging_user');
+            }
+        }
+        
+        // 저장된 유저 정보가 없으면 기본 데이터 로드
+        fetchRecordsFromFirebase();
     });
 
     // 실시간 현재 접속자 수 관리 시스템
@@ -765,6 +807,11 @@
         const studentName = document.getElementById('studentName').value.trim();
 
         if(studentId === '개발자 모드' && studentName === '개발자 모드') {
+            currentUser.id = studentId;
+            currentUser.name = studentName;
+            // 로컬스토리지에 로그인 상태 저장
+            localStorage.setItem('plogging_user', JSON.stringify(currentUser));
+            
             closeModal();
             navigateTo('devPage');
             
@@ -793,6 +840,9 @@
 
         currentUser.id = studentId;
         currentUser.name = studentName;
+        // 로컬스토리지에 로그인 상태 저장
+        localStorage.setItem('plogging_user', JSON.stringify(currentUser));
+
         document.getElementById('userDisplay').innerText = `${studentId} ${studentName}`;
         closeModal();
         navigateTo('dashboardPage');
@@ -824,6 +874,8 @@
     function logout() {
         if(confirm('로그아웃 하시겠습니까?')) {
             currentUser = { id: '', name: '' };
+            // 로그아웃 시 로컬스토리지 정보 삭제
+            localStorage.removeItem('plogging_user');
             navigateTo('introPage');
         }
     }

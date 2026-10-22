@@ -482,7 +482,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">활동 위치 맵 인터페이스 (오픈스탠다드 지도 적용)</h2>
+            <h2 class="section-title">활동 위치 맵 인터페이스 (국내 보안 규정 준수 지도 적용)</h2>
             <div class="map-wrapper">
                 <div id="map"></div>
             </div>
@@ -575,7 +575,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">전체 활동 위치 맵 인터페이스 (오픈스탠다드 지도 적용)</h2>
+            <h2 class="section-title">전체 활동 위치 맵 인터페이스 (국내 보안 규정 준수 지도 적용)</h2>
             <div class="map-wrapper" style="min-height: 400px;">
                 <div id="devMap"></div>
             </div>
@@ -674,13 +674,17 @@
         });
     }
 
-    // 일반 지도 초기화 (OpenStreetMap 적용 - 군사보안지역 자동 마스킹 정책 준수)
+    // 일반 지도 초기화 (V-World 표준 지도 적용 - 발급받은 API 키 반영)
     function initLeafletMap() {
         if (!map) {
             map = L.map('map').setView([37.5445, 126.9815], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            
+            const vworldApiKey = '8AD56C6D-0F04-4822-985B-813C4E755070'; 
+
+            L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${vworldApiKey}/Base/{z}/{y}/{x}.png`, {
                 maxZoom: 19,
-                attribution: '&copy; OpenStreetMap contributors'
+                minZoom: 6,
+                attribution: '&copy; V-World'
             }).addTo(map);
         }
         setTimeout(() => {
@@ -689,13 +693,17 @@
         }, 200);
     }
 
-    // 개발자 모드 지도 초기화 (OpenStreetMap 적용)
+    // 개발자 모드 지도 초기화 (V-World 표준 지도 적용)
     function initDevLeafletMap() {
         if (!devMap) {
             devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            
+            const vworldApiKey = '8AD56C6D-0F04-4822-985B-813C4E755070';
+
+            L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${vworldApiKey}/Base/{z}/{y}/{x}.png`, {
                 maxZoom: 19,
-                attribution: '&copy; OpenStreetMap contributors'
+                minZoom: 6,
+                attribution: '&copy; V-World'
             }).addTo(devMap);
         }
         setTimeout(() => {
@@ -804,7 +812,6 @@
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
         
-        // 페이지 전환 후 지도 크기 강제 갱신 (회색 화면 방지)
         setTimeout(() => {
             if (pageId === 'dashboardPage' && map) {
                 map.invalidateSize();
@@ -985,7 +992,6 @@
         });
     }
 
-    // 개발자 모드: 더 상세하고 가독성 좋은 줄글 형식 로그 출력
     function renderDevLogs() {
         const records = getRecordsFromStorage();
         records.sort((a, b) => b.id - a.id);

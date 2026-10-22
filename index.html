@@ -1,9 +1,18 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>용산고등학교 데이터 플로깅 기록지</title>
+    <!-- Firebase SDK (Compat 버전) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Leaflet CSS (무료 지도 라이브러리) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
         /* 시스템 기본 스타일 선언 */
         * {
@@ -151,7 +160,6 @@
             padding-bottom: 20px;
         }
 
-        /* 요구사항 반영: 타이틀 텍스트 크기 대폭 확대 (22px -> 30px) */
         .system-header h1 {
             color: #1b5e20;
             font-size: 30px;
@@ -243,7 +251,6 @@
             border-color: #2b8a3e;
         }
 
-        /* 수량 입력 체크박스 */
         .trash-select-container {
             background: #f8f9fa;
             padding: 12px;
@@ -312,7 +319,6 @@
             cursor: pointer;
         }
 
-        /* 동적 카카오 지도 컨테이너 */
         .map-wrapper {
             width: 100%;
             height: 100%;
@@ -328,30 +334,6 @@
             height: 100%;
         }
 
-        /* 지도 위 커스텀 오버레이(말풍선) 디자인 */
-        .custom-overlay {
-            background: #ffffff;
-            border: 2px solid #2b8a3e;
-            border-radius: 6px;
-            padding: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            font-size: 12px;
-            position: relative;
-            bottom: 50px;
-            white-space: nowrap;
-        }
-        .custom-overlay::after {
-            content: '';
-            position: absolute;
-            border-top: 8px solid #2b8a3e;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            bottom: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        /* 데이터 로그 리스트 */
         .log-container {
             max-height: 300px;
             overflow-y: auto;
@@ -419,8 +401,6 @@
             .system-header { flex-direction: column; align-items: flex-start; gap: 10px; }
         }
     </style>
-    
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_MAP_API_KEY&libraries=services"></script>
 </head>
 <body>
 
@@ -457,7 +437,6 @@
 
 <div id="dashboardPage" class="page">
     <div class="main-grid">
-        
         <header class="card full-width">
             <div class="system-header">
                 <h1>용산고등학교 데이터 플로깅 기록 시스템</h1>
@@ -475,7 +454,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">활동 위치 맵 인터페이스 (용산고등학교 중심)</h2>
+            <h2 class="section-title">활동 위치 위성 맵 인터페이스 (용산고등학교 중심)</h2>
             <div class="map-wrapper">
                 <div id="map"></div>
             </div>
@@ -488,7 +467,6 @@
                     <label for="date">실시 일자</label>
                     <input type="date" id="date" required>
                 </div>
-                
                 <div class="form-group">
                     <label for="placeInput">플로깅 장소 (정확한 주소 또는 장소명)</label>
                     <input type="text" id="placeInput" placeholder="예: 서울 용산구 두텁바위로 60 또는 후암동 주민센터" required>
@@ -554,6 +532,20 @@
 </div>
 
 <script>
+    // 파이어베이스 초기화 및 설정
+    const firebaseConfig = { 
+        apiKey: "AIzaSyDMsKdktTu-jtYGAz2Rr9Gyp_3pPgnv6kg", 
+        authDomain: "data-plogging-site.firebaseapp.com", 
+        projectId: "data-plogging-site", 
+        storageBucket: "data-plogging-site.firebasestorage.app", 
+        messagingSenderId: "807171750903", 
+        appId: "1:807171750903:web:ab33abbad9b32af1478cf2", 
+        measurementId: "G-4Q2HXP6TT7" 
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     const authModal = document.getElementById('authModal');
     const authForm = document.getElementById('authForm');
     const dataForm = document.getElementById('dataForm');
@@ -563,34 +555,58 @@
     const otherTrashName = document.getElementById('otherTrashName');
 
     let currentUser = { id: '', name: '' };
+    let appRecords = []; 
     
-    // 카카오 지도 관련 전역 제어 변수
+    // Leaflet 지도 관련 전역 제어 변수
     let map = null;
-    let geocoder = null;
-    let markersArray = []; // 초기화용 마커 보관 배열
-    let currentOverlay = null; // 열려있는 말풍선 오브젝트 보관함
+    let markersArray = []; 
 
     document.addEventListener('DOMContentLoaded', () => {
         setupCheckboxListeners();
-        renderLogs();
-        updateDashboard();
+        fetchRecordsFromFirebase();
     });
 
-    // 카카오 지도 초기화 함수
-    function initKakaoMap() {
-        const container = document.getElementById('map');
-        
-        // 요구사항 반영: 핑(마커) 없이 '용산고등학교'가 바로 보이도록 주소 기준 좌표(37.5445, 126.9815) 설정
-        const options = {
-            center: new kakao.maps.LatLng(37.5445, 126.9815), 
-            level: 4 // 적당한 확대 축소 레벨
-        };
+    // 파이어베이스에서 데이터 불러오기 함수
+    function fetchRecordsFromFirebase() {
+        db.collection('records').get().then((querySnapshot) => {
+            appRecords = [];
+            querySnapshot.forEach((doc) => {
+                appRecords.push(doc.data());
+            });
+            renderLogs();
+            updateDashboard();
+        }).catch((error) => {
+            console.error("데이터 로드 실패: ", error);
+        });
+    }
 
-        map = new kakao.maps.Map(container, options);
-        geocoder = new kakao.maps.services.Geocoder(); // 주소-좌표 변환 객체
+    // Leaflet 무료 위성 지도 초기화 함수
+    function initLeafletMap() {
+        if (map) return;
+        // 용산고등학교 중심 좌표 설정 (위도: 37.5445, 경도: 126.9815)
+        map = L.map('map').setView([37.5445, 126.9815], 15);
 
-        // 화면 로드 시 로컬스토리지에 있던 기존 기록들의 핑(마커) 다시 그리기
+        // 무료 위성 지도 타일(Esri World Imagery) 적용
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri'
+        }).addTo(map);
+
         drawSavedMarkers();
+    }
+
+    // 무료 오픈 주소 검색 (Nominatim API 활용)
+    async function searchLocation(placeQuery) {
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeQuery)}`);
+            const data = await response.json();
+            if (data && data.length > 0) {
+                return { lat: data[0].lat, lng: data[0].lon };
+            }
+            return null;
+        } catch (error) {
+            console.error("주소 검색 오류:", error);
+            return null;
+        }
     }
 
     function setupCheckboxListeners() {
@@ -642,15 +658,24 @@
         closeModal();
         navigateTo('dashboardPage');
         
-        // 지도가 숨겨진 div에 있다가 나타나므로 레이아웃을 한 번 재조정해주는 카카오맵 트리거 실행
-        setTimeout(() => {
-            if (!map) {
-                initKakaoMap();
-            } else {
-                map.relayout();
-                map.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
-            }
-        }, 200);
+        db.collection('records').get().then((querySnapshot) => {
+            appRecords = [];
+            querySnapshot.forEach((doc) => {
+                appRecords.push(doc.data());
+            });
+            updateDashboard();
+            renderLogs();
+
+            setTimeout(() => {
+                if (!map) {
+                    initLeafletMap();
+                } else {
+                    map.invalidateSize();
+                    map.setView([37.5445, 126.9815], 15);
+                    drawSavedMarkers();
+                }
+            }, 200);
+        });
     });
 
     function navigateTo(pageId) {
@@ -659,20 +684,18 @@
     }
 
     function logout() {
-        if(confirm('로그아웃 하시겠습니까? 데이터는 브라우저에 안전하게 보관됩니다.')) {
+        if(confirm('로그아웃 하시겠습니까?')) {
             currentUser = { id: '', name: '' };
             navigateTo('introPage');
         }
     }
 
-    /* [데이터 등록 및 주소 변환] */
-    dataForm.addEventListener('submit', function(e) {
+    dataForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const date = document.getElementById('date').value;
         const place = document.getElementById('placeInput').value;
         const memo = document.getElementById('memo').value || '특이사항 없음';
-        
         const collectedItems = [];
         let totalCountInRecord = 0;
 
@@ -691,7 +714,7 @@
                 }
 
                 collectedItems.push({ name, count });
-                totalCountInRecord += count; // 해당 기록의 총 쓰레기 개수 누적
+                totalCountInRecord += count; 
             }
         });
 
@@ -700,114 +723,77 @@
             return;
         }
 
-        // 카카오 주소 검색 API 연동 기법 적용
-        geocoder.keywordSearch(place, function(result, status) {
-            // 키워드 검색 실패 시 일반 도로명/지번 주소 검색으로 2차 시도
-            if (status !== kakao.maps.services.Status.OK) {
-                geocoder.addressSearch(place, function(addrResult, addrStatus) {
-                    if (addrStatus !== kakao.maps.services.Status.OK) {
-                        alert('입력하신 장소 또는 주소를 지도에서 찾을 수 없습니다. 정확하게 기입해 주세요.');
-                        return;
-                    }
-                    saveAndRenderAll(addrResult[0].y, addrResult[0].x);
-                });
-            } else {
-                saveAndRenderAll(result[0].y, result[0].x);
-            }
-        });
-
-        // 주소의 위도(lat), 경도(lng)를 찾아 유효할 때만 데이터를 영구 저장하는 내부 함수
-        function saveAndRenderAll(lat, lng) {
-            const record = {
-                id: Date.now(),
-                studentId: currentUser.id,
-                studentName: currentUser.name,
-                date,
-                place,
-                lat: parseFloat(lat),
-                lng: parseFloat(lng),
-                items: collectedItems,
-                totalTrashCount: totalCountInRecord,
-                memo
-            };
-
-            saveRecord(record);
-            updateDashboard();
-            renderLogs();
-            drawSavedMarkers(); // 지도 위 마커 즉시 업데이트
-            
-            dataForm.reset();
-            document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
-            otherField.classList.remove('active');
-            
-            // 등록된 위치로 지도 중심 부드럽게 이동
-            const moveLatLon = new kakao.maps.LatLng(lat, lng);
-            map.panTo(moveLatLon);
+        // 무료 지오코딩 API를 통한 위치 검색
+        const coords = await searchLocation(place);
+        if (!coords) {
+            alert('입력하신 장소 또는 주소를 지도에서 찾을 수 없습니다. 정확하게 기입해 주세요.');
+            return;
         }
+
+        const record = {
+            id: Date.now(),
+            studentId: currentUser.id,
+            studentName: currentUser.name,
+            date,
+            place,
+            lat: parseFloat(coords.lat),
+            lng: parseFloat(coords.lng),
+            items: collectedItems,
+            totalTrashCount: totalCountInRecord,
+            memo
+        };
+
+        saveRecordToFirebase(record);
     });
 
-    function saveRecord(record) {
-        const records = getRecordsFromStorage();
-        records.push(record);
-        localStorage.setItem('ysPloggingRecords', JSON.stringify(records));
+    function saveRecordToFirebase(record) {
+        db.collection('records').doc(String(record.id)).set(record)
+            .then(() => {
+                appRecords.push(record);
+                updateDashboard();
+                renderLogs();
+                drawSavedMarkers(); 
+                dataForm.reset();
+                document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
+                otherField.classList.remove('active');
+                
+                map.panTo([record.lat, record.lng]);
+            })
+            .catch((error) => {
+                console.error("저장 실패: ", error);
+                alert("데이터 저장 중 오류가 발생했습니다.");
+            });
     }
 
     function getRecordsFromStorage() {
-        const storedData = localStorage.getItem('ysPloggingRecords');
-        return storedData ? JSON.parse(storedData) : [];
+        return appRecords;
     }
 
-    // 요구사항 반영: 브라우저를 껐다 켜도 데이터가 로컬 스토리지에 영구 보존됨
     function updateDashboard() {
         const records = getRecordsFromStorage();
         document.getElementById('totalCount').innerText = `총 활동 횟수: ${records.length}회`;
     }
 
-    /* [요구사항 반영: 동적 핑(마커) 처리 및 클릭 시 총 쓰레기 개수 오버레이 표시] */
     function drawSavedMarkers() {
-        // 기존에 그려진 마커들 싹 지우기
-        markersArray.forEach(m => m.setMap(null));
+        markersArray.forEach(m => map.removeLayer(m));
         markersArray = [];
-        if(currentOverlay) currentOverlay.setMap(null);
 
         const records = getRecordsFromStorage();
 
         records.forEach(record => {
             if(!record.lat || !record.lng) return;
 
-            const markerPosition = new kakao.maps.LatLng(record.lat, record.lng);
+            const marker = L.marker([record.lat, record.lng]).addTo(map);
             
-            // 마커 생성
-            const marker = new kakao.maps.LatLng(record.lat, record.lng);
-            const kakaoMarker = new kakao.maps.Marker({
-                position: markerPosition,
-                map: map
-            });
+            const popupContent = `
+                <div style="font-size:12px;">
+                    <strong>${record.place}</strong><br>
+                    <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
 
-            markersArray.push(kakaoMarker);
-
-            // 마커 클릭 이벤트 바인딩
-            kakao.maps.event.addListener(kakaoMarker, 'click', function() {
-                if(currentOverlay) currentOverlay.setMap(null); // 기존 열린 창 닫기
-
-                // 말풍선 내부 콘텐츠 디자인 (장소명 + 발견된 총 쓰레기 개수 매핑)
-                const content = `
-                    <div class="custom-overlay">
-                        <strong>${record.place}</strong><br>
-                        <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
-                    </div>
-                `;
-
-                // 커스텀 오버레이 생성 및 지도 표시
-                currentOverlay = new kakao.maps.CustomOverlay({
-                    content: content,
-                    position: markerPosition,
-                    xAnchor: 0.5,
-                    yAnchor: 0.5
-                });
-
-                currentOverlay.setMap(map);
-            });
+            markersArray.push(marker);
         });
     }
 
@@ -825,9 +811,7 @@
         records.forEach(record => {
             const item = document.createElement('div');
             item.classList.add('log-item');
-            
             const tagsHTML = record.items.map(it => `<span class="trash-tag">${it.name}: ${it.count}개</span>`).join('');
-            
             item.innerHTML = `
                 <div class="log-info">
                     <div class="date">[일자] ${record.date} | 장소: ${record.place} <span style="color:#666; font-weight:normal; font-size:12px;">(${record.studentId} ${record.studentName})</span></div>
@@ -841,12 +825,19 @@
     }
 
     function deleteRecord(id) {
-        let records = getRecordsFromStorage();
-        records = records.filter(record => record.id !== id);
-        localStorage.setItem('ysPloggingRecords', JSON.stringify(records));
-        updateDashboard();
-        renderLogs();
-        drawSavedMarkers(); // 마커 동기화 리렌더링
+        if(!confirm('정말 삭제하시겠습니까?')) return;
+
+        db.collection('records').doc(String(id)).delete()
+            .then(() => {
+                appRecords = appRecords.filter(record => record.id !== id);
+                updateDashboard();
+                renderLogs();
+                drawSavedMarkers(); 
+            })
+            .catch((error) => {
+                console.error("삭제 실패: ", error);
+                alert("데이터 삭제 중 오류가 발생했습니다.");
+            });
     }
 </script>
 

@@ -8,8 +8,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     
-    <!-- 카카오 지도 API 연동 -->
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=7eff19a008c90967db073b64bc25e197&libraries=services"></script>
+    <!-- Leaflet CSS (무료 지도 라이브러리) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
         /* 시스템 기본 스타일 선언 */
@@ -378,29 +380,6 @@
             padding: 30px 0;
         }
 
-        /* 지도 위 말풍선 오버레이 디자인 */
-        .custom-overlay {
-            background: #ffffff;
-            border: 2px solid #2b8a3e;
-            border-radius: 6px;
-            padding: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            font-size: 12px;
-            position: relative;
-            bottom: 50px;
-            white-space: nowrap;
-        }
-        .custom-overlay::after {
-            content: '';
-            position: absolute;
-            border-top: 8px solid #2b8a3e;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            bottom: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
         @media (max-width: 768px) {
             .main-grid { grid-template-columns: 1fr; }
             .full-width { grid-column: span 1; }
@@ -463,7 +442,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">활동 위치 맵 인터페이스 (용산고등학교 중심)</h2>
+            <h2 class="section-title">활동 위치 맵 인터페이스 (보안 위성 지도 적용)</h2>
             <div class="map-wrapper">
                 <div id="map"></div>
             </div>
@@ -555,7 +534,7 @@
         </header>
 
         <section class="card" style="display: flex; flex-direction: column;">
-            <h2 class="section-title">전체 활동 위치 맵 인터페이스</h2>
+            <h2 class="section-title">전체 활동 위치 맵 인터페이스 (보안 위성 지도 적용)</h2>
             <div class="map-wrapper" style="min-height: 400px;">
                 <div id="devMap"></div>
             </div>
@@ -596,14 +575,11 @@
     let currentUser = { id: '', name: '' };
     let appRecords = []; 
     
-    // 카카오 지도 관련 전역 제어 변수
+    // Leaflet 지도 관련 전역 제어 변수
     let map = null;
     let devMap = null;
-    let geocoder = null;
     let markersArray = []; 
     let devMarkersArray = [];
-    let currentOverlay = null;
-    let devCurrentOverlay = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         setupCheckboxListeners();
@@ -625,39 +601,52 @@
         });
     }
 
-    // 카카오 지도 초기화 함수
-    function initKakaoMap() {
+    // Leaflet 보안 위성 지도 초기화 함수 (브이월드 위성지도 적용으로 군사시설 등 보안지역 자동 가려짐)
+    function initLeafletMap() {
         if (map) {
-            map.relayout();
-            map.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+            map.invalidateSize();
             return;
         }
-        const container = document.getElementById('map');
-        const options = {
-            center: new kakao.maps.LatLng(37.5445, 126.9815), 
-            level: 4 
-        };
-        map = new kakao.maps.Map(container, options);
-        map.setMapTypeId(kakao.maps.MapTypeId.HYBRID); // 위성지도(하이브리드) 고정
-        geocoder = new kakao.maps.services.Geocoder(); 
+        map = L.map('map').setView([37.5445, 126.9815], 15);
+        
+        // 국내 브이월드(V-World) 위성지도 타일 적용 (보안 지역 블러 처리 반영)
+        L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
+            maxZoom: 19,
+            attribution: '&copy; V-World'
+        }).addTo(map);
+
         drawSavedMarkers();
     }
 
-    // 개발자 모드 카카오 지도 초기화 함수
-    function initDevKakaoMap() {
+    // 개발자 모드 Leaflet 보안 위성 지도 초기화 함수
+    function initDevLeafletMap() {
         if (devMap) {
-            devMap.relayout();
-            devMap.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+            devMap.invalidateSize();
             return;
         }
-        const container = document.getElementById('devMap');
-        const options = {
-            center: new kakao.maps.LatLng(37.5445, 126.9815), 
-            level: 4 
-        };
-        devMap = new kakao.maps.Map(container, options);
-        devMap.setMapTypeId(kakao.maps.MapTypeId.HYBRID); // 위성지도(하이브리드) 고정
+        devMap = L.map('devMap').setView([37.5445, 126.9815], 15);
+        
+        L.tileLayer('https://api.vworld.kr/req/wmts/1.0.0/KEY_IS_NOT_NEEDED/Satellite/{z}/{y}/{x}.jpeg', {
+            maxZoom: 19,
+            attribution: '&copy; V-World'
+        }).addTo(devMap);
+
         drawDevMarkers();
+    }
+
+    // 무료 오픈 주소 검색 (Nominatim API 활용)
+    async function searchLocation(placeQuery) {
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(placeQuery)}`);
+            const data = await response.json();
+            if (data && data.length > 0) {
+                return { lat: data[0].lat, lng: data[0].lon };
+            }
+            return null;
+        } catch (error) {
+            console.error("주소 검색 오류:", error);
+            return null;
+        }
     }
 
     function setupCheckboxListeners() {
@@ -710,9 +699,9 @@
                 });
                 renderDevLogs();
                 setTimeout(() => {
-                    initDevKakaoMap();
-                    devMap.relayout();
-                    devMap.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+                    initDevLeafletMap();
+                    devMap.invalidateSize();
+                    devMap.setView([37.5445, 126.9815], 15);
                     drawDevMarkers();
                 }, 200);
             });
@@ -748,9 +737,9 @@
             renderRanking();
 
             setTimeout(() => {
-                initKakaoMap();
-                map.relayout();
-                map.setCenter(new kakao.maps.LatLng(37.5445, 126.9815));
+                initLeafletMap();
+                map.invalidateSize();
+                map.setView([37.5445, 126.9815], 15);
                 drawSavedMarkers();
             }, 200);
         });
@@ -768,7 +757,7 @@
         }
     }
 
-    dataForm.addEventListener('submit', function(e) {
+    dataForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const date = document.getElementById('date').value;
@@ -801,36 +790,26 @@
             return;
         }
 
-        geocoder.keywordSearch(place, function(result, status) {
-            if (status !== kakao.maps.services.Status.OK) {
-                geocoder.addressSearch(place, function(addrResult, addrStatus) {
-                    if (addrStatus !== kakao.maps.services.Status.OK) {
-                        alert('입력하신 장소 또는 주소를 지도에서 찾을 수 없습니다. 정확하게 기입해 주세요.');
-                        return;
-                    }
-                    saveAndRenderAll(addrResult[0].y, addrResult[0].x);
-                });
-            } else {
-                saveAndRenderAll(result[0].y, result[0].x);
-            }
-        });
-
-        function saveAndRenderAll(lat, lng) {
-            const record = {
-                id: Date.now(),
-                studentId: currentUser.id,
-                studentName: currentUser.name,
-                date,
-                place,
-                lat: parseFloat(lat),
-                lng: parseFloat(lng),
-                items: collectedItems,
-                totalTrashCount: totalCountInRecord,
-                memo
-            };
-
-            saveRecordToFirebase(record);
+        const coords = await searchLocation(place);
+        if (!coords) {
+            alert('입력하신 장소 또는 주소를 지도에서 찾을 수 없습니다. 정확하게 기입해 주세요.');
+            return;
         }
+
+        const record = {
+            id: Date.now(),
+            studentId: currentUser.id,
+            studentName: currentUser.name,
+            date,
+            place,
+            lat: parseFloat(coords.lat),
+            lng: parseFloat(coords.lng),
+            items: collectedItems,
+            totalTrashCount: totalCountInRecord,
+            memo
+        };
+
+        saveRecordToFirebase(record);
     });
 
     function saveRecordToFirebase(record) {
@@ -844,8 +823,7 @@
                 document.querySelectorAll('.counter-input').forEach(input => input.disabled = true);
                 otherField.classList.remove('active');
                 
-                const moveLatLon = new kakao.maps.LatLng(record.lat, record.lng);
-                map.panTo(moveLatLon);
+                map.panTo([record.lat, record.lng]);
             })
             .catch((error) => {
                 console.error("저장 실패: ", error);
@@ -864,81 +842,41 @@
 
     function drawSavedMarkers() {
         if (!map) return;
-        markersArray.forEach(m => m.setMap(null));
+        markersArray.forEach(m => map.removeLayer(m));
         markersArray = [];
-        if(currentOverlay) currentOverlay.setMap(null);
 
         const records = getRecordsFromStorage();
         records.forEach(record => {
             if(!record.lat || !record.lng) return;
 
-            const markerPosition = new kakao.maps.LatLng(record.lat, record.lng);
-            const kakaoMarker = new kakao.maps.Marker({
-                position: markerPosition,
-                map: map
-            });
-
-            markersArray.push(kakaoMarker);
-
-            kakao.maps.event.addListener(kakaoMarker, 'click', function() {
-                if(currentOverlay) currentOverlay.setMap(null); 
-
-                const content = `
-                    <div class="custom-overlay">
-                        <strong>${record.place}</strong><br>
-                        <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
-                    </div>
-                `;
-
-                currentOverlay = new kakao.maps.CustomOverlay({
-                    content: content,
-                    position: markerPosition,
-                    xAnchor: 0.5,
-                    yAnchor: 0.5
-                });
-
-                currentOverlay.setMap(map);
-            });
+            const marker = L.marker([record.lat, record.lng]).addTo(map);
+            marker.bindPopup(`
+                <div style="font-size:12px;">
+                    <strong>${record.place}</strong><br>
+                    <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
+                </div>
+            `);
+            markersArray.push(marker);
         });
     }
 
     function drawDevMarkers() {
         if (!devMap) return;
-        devMarkersArray.forEach(m => m.setMap(null));
+        devMarkersArray.forEach(m => devMap.removeLayer(m));
         devMarkersArray = [];
-        if(devCurrentOverlay) devCurrentOverlay.setMap(null);
 
         const records = getRecordsFromStorage();
         records.forEach(record => {
             if(!record.lat || !record.lng) return;
 
-            const markerPosition = new kakao.maps.LatLng(record.lat, record.lng);
-            const kakaoMarker = new kakao.maps.Marker({
-                position: markerPosition,
-                map: devMap
-            });
-
-            devMarkersArray.push(kakaoMarker);
-
-            kakao.maps.event.addListener(kakaoMarker, 'click', function() {
-                if(devCurrentOverlay) devCurrentOverlay.setMap(null); 
-
-                const content = `
-                    <div class="custom-overlay">
-                        <strong>${record.place}</strong> (${record.studentId} ${record.studentName})<br>
-                        <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
-                    </div>
-                `;
-
-                devCurrentOverlay = new kakao.maps.CustomOverlay({
-                    content: content,
-                    position: markerPosition,
-                    xAnchor: 0.5,
-                    yAnchor: 0.5
-                });
-
-                devCurrentOverlay.setMap(devMap);
-            });
+            const marker = L.marker([record.lat, record.lng]).addTo(devMap);
+            marker.bindPopup(`
+                <div style="font-size:12px;">
+                    <strong>${record.place}</strong> (${record.studentId} ${record.studentName})<br>
+                    <span style="color:#2b8a3e; font-weight:bold;">수거된 쓰레기: ${record.totalTrashCount}개</span>
+                </div>
+            `);
+            devMarkersArray.push(marker);
         });
     }
 

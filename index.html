@@ -645,7 +645,7 @@
     const otherField = document.getElementById('otherField');
     const otherTrashName = document.getElementById('otherTrashName');
 
-    let currentUser = { id: '', name: '' };
+    let currentUser = { id: '', name: '', ip: 'Unknown' };
     let appRecords = []; 
     let presenceDocRef = null;
     let currentSessionId = null;
@@ -659,6 +659,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         setupCheckboxListeners();
         initPresenceSystem();
+        fetchUserIP(); // 접속 시 IP 주소 확인
         
         // 새로고침 시 로그인 상태 자동 복원 로직 추가
         const savedUser = localStorage.getItem('plogging_user');
@@ -667,6 +668,7 @@
                 const parsed = JSON.parse(savedUser);
                 currentUser.id = parsed.id;
                 currentUser.name = parsed.name;
+                currentUser.ip = parsed.ip || 'Unknown';
 
                 if (currentUser.id === '개발자 모드' && currentUser.name === '개발자 모드') {
                     navigateTo('devPage');
@@ -698,6 +700,23 @@
         fetchRecordsFromFirebase();
     });
 
+    // 클라이언트 공인 IP 조회 함수
+    async function fetchUserIP() {
+        try {
+            const response = await fetch('https://api.ipify.org?format=json');
+            const data = await response.json();
+            if (data && data.ip) {
+                currentUser.ip = data.ip;
+                // 세션 문서가 이미 존재한다면 IP 정보 업데이트
+                if (presenceDocRef) {
+                    presenceDocRef.update({ ip: data.ip }).catch(() => {});
+                }
+            }
+        } catch (e) {
+            console.error("IP 조회 실패:", e);
+        }
+    }
+
     // 실시간 현재 접속자 수 관리 시스템 (타임아웃 및 세션 정리 적용)
     function initPresenceSystem() {
         currentSessionId = 'user_' + Math.random().toString(36).substring(2);
@@ -707,7 +726,8 @@
             if (currentUser.id || window.location.hash === '#dev' || localStorage.getItem('plogging_user')) {
                 presenceDocRef.set({
                     timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    user: currentUser.id || 'guest'
+                    user: currentUser.id || 'guest',
+                    ip: currentUser.ip || 'Unknown'
                 }).catch(() => {});
             }
         };
@@ -866,10 +886,13 @@
     function openModal() { authModal.classList.add('active'); }
     function closeModal() { authModal.classList.remove('active'); authForm.reset(); }
 
-    authForm.addEventListener('submit', function(e) {
+    authForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         const studentId = document.getElementById('studentId').value.trim();
         const studentName = document.getElementById('studentName').value.trim();
+
+        // 확실한 IP 확인을 위해 제출 직전 한번 더 IP 갱신 시도
+        await fetchUserIP();
 
         if(studentId === '개발자 모드' && studentName === '개발자 모드') {
             currentUser.id = studentId;
@@ -940,7 +963,7 @@
             if (presenceDocRef) {
                 presenceDocRef.delete().catch(() => {});
             }
-            currentUser = { id: '', name: '' };
+            currentUser = { id: '', name: '', ip: 'Unknown' };
             localStorage.removeItem('plogging_user');
             navigateTo('introPage');
         }
@@ -990,6 +1013,7 @@
             id: Date.now(),
             studentId: currentUser.id,
             studentName: currentUser.name,
+            clientIp: currentUser.ip || 'Unknown', // 기록에 IP 정보 포함
             date,
             place,
             lat: parseFloat(coords.lat),
@@ -1091,7 +1115,6 @@
         const rankArray = Object.values(userScores);
         rankArray.sort((a, b) => b.totalCount - a.totalCount);
 
-        // 일반 순위표와 개발자 모드 순위표 양쪽에 모두 렌더링
         const containers = [rankContainer, devRankContainer];
 
         containers.forEach(container => {
@@ -1130,12 +1153,13 @@
         records.forEach(record => {
             const timeStr = record.timestamp || '2026.00.00 00:00:00';
             const itemsDetail = record.items.map(it => `${it.name} ${it.count}개`).join(', ');
+            const ipStr = record.clientIp ? `[IP: ${record.clientIp}]` : '[IP: Unknown]';
             
             const item = document.createElement('div');
             item.classList.add('terminal-line');
             item.innerHTML = `
                 <span style="flex-grow: 1;">
-                    <strong>[${timeStr}]</strong> 학번 <strong>${record.studentId}</strong> 성명 <strong>${record.studentName}</strong>님이 
+                    <strong>[${timeStr}]</strong> ${ipStr} 학번 <strong>${record.studentId}</strong> 성명 <strong>${record.studentName}</strong>님이 
                     '<span style="color: #4dabf7;">${record.place}</span>'(실시일자: ${record.date})에서 플로깅 활동을 기록함. 
                     <br>&nbsp;&nbsp;└ 상세 수거 내역: [ ${itemsDetail} ] (총 수거량: <span style="color: #ffd43b;">${record.totalTrashCount}개</span>) | 비고: "${record.memo}"
                 </span>
